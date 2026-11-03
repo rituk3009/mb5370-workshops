@@ -130,13 +130,110 @@ cat /pvol/data/mg/refs/*alfacsensis*.fna | bioawk -c fastx -f gc.awk
 #the two circular chromosomes are "AP024166.1      1553697 "0.438144" & "AP024167.1      320083  0.418301" with a depth of 15x and 14x respectively 
 ```
 ## Step 3: Basic assembly QC
-
+#Previously we used gc.awk to print the length and GC content for reference sequences. Now we will do the same thing for our assembled contigs.
 Commands run in `assembly_check/`.
+```{bash}
+cd ~/mb5370-workshops/assembly_check
+pwd
 
+#Use your gc.awk script to print GC and lengths for the assembly
+cat ../flye_metagenome/mock/assembly.fasta | bioawk -c fastx -f ../gc.awk
+#Run the command again but this time send outputs to a file called `assembly.gc.tsv`.
+cat ../flye_metagenome/mock/assembly.fasta | bioawk -c fastx -f ../gc.awk > assembly.gc.tsv
+
+#in a real metagenomic assembly we would not know the reference sequences and we would like to be able to group contigs from the same species together. Two of the most useful statistics for this purpose are the GC content and the coverage depth because these should generally be similar for contigs derived from the same chromosome.
+
+#We have GC content in `assembly.gc.tsv` and coverage depth in the `assembly_info.txt` file produced by flye. Let’s read those and join them together using R
+```
+```{r}
+library(tidyverse)
+gc <- read_tsv("assembly_check/assembly.gc.tsv",col_names = c("#seq_name","length","GC"))
+info <- read_tsv("flye_metagenome/mock/assembly_info.txt")
+
+#Since both datasets have a #seq_name column we can join them easily as follows
+gc_info <- info |> 
+  left_join(gc)
+
+gc_info |> 
+  ggplot(aes(x=GC)) + geom_histogram() + ylab("Number of contigs")
+#A histogram by GC content shows several peaks, probably corresponding to major groupings of taxonomically distinct lineages within the data.
+
+#A plot of GC vs coverage helps to identify clusters that have similar values for both these parameters. In making this plot we first filter the data to remove contigs with unrealistically high GC content and very high coverage depth (probably repeats)
+gc_info |> 
+  filter(GC<0.8) |> 
+  filter(cov.<25) |> 
+  ggplot(aes(x=GC,y=cov.)) + geom_point(aes(size=length)) + # Contig lengths are shown through point size
+  ylab("Coverage depth")
+
+#Adding labels allows us to look at the contigs with highest coverage and compare these with the contigs in bandage. Notice how the contigs for Vibrio alfacsensis cluster together.
+library(ggrepel)
+gc_info |> 
+  filter(GC<0.8) |> 
+  filter(cov.<25) |> 
+  ggplot(aes(x=GC,y=cov.)) + geom_point(aes(size=length)) + geom_label_repel(aes(label=`#seq_name`))
+
+#there is a cluster of contigs with high GC content (>60%) and coverage depth around 7.5x. Which species are these likely to belong to? 
+```
+```{bash}
+for f in /pvol/data/mg/refs/*.fna; do
+  bioawk -c fastx -v f="$f" '{g += gc($seq)*length($seq); n += length($seq)} END {print f, g/n}' "$f"
+done
+#answer: desulfovibrio GC=0.63
+
+#Since our mock metagenome has a precisely known composition we can assess its completeness in a crude way simply by comparing the length of our assembly with that of the reference.
+cd ..
+#calculate the total length of our reference sequences. This command builds on one we ran earlier to list the size and GC content of reference chromosomes, but this time we have added another very simple awk program to take the sum of the second column.
+cat /pvol/data/mg/refs/*.fna | bioawk -c fastx -f gc.awk | awk '{sum+=$2}END{print sum}'
+#total length of reference = 24095709
+```
+```{r}
+#Calculate the total length of your assembly using R by taking the sum of the contig lengths column. What proportion of the reference sequence does this represent?
+total_assembly <- sum(info$length)
+total_assembly
+
+total_ref <- 24095709
+round(100*total_assembly/total_ref,1)
+#76.1%
+
+```
 ## Step 4: Binning
 
 Commands run in `metabat/`.
+```{bash}
+cd ~/mb5370-workshops/metabat
+#Prepare an input file summarising read depth information for all contigs
+cat ../flye_metagenome/mock/assembly_info.txt  | grep -v '#' | awk '{OFS="\t";print $1,$3}' > depths.txt
+
+#Next we need to create a new version of the assembly file in which the contigs have the same order as those in the depths.txt file. We do this using a samtools faidx which allows us to extract entries from a fasta file in whatever order we specify.
+cat depths.txt | awk '{print $1}' | xargs samtools faidx ../flye_metagenome/mock/assembly.fasta > assembly_ordered.fasta
+
+#Finally, run metabat as follows
+metabat2 -i assembly_ordered.fasta -a depths.txt --cvExt -o bins/metabat --seed 5
+
+#The bins directory will contain multi-fasta files with each of the bins inferred by metabat. To quickly inspect which contigs were grouped into which bin we can just use a grep command like this
+grep '>' bins/*
+```
 
 ## Step 5: Bin quality with CheckM
 
 Commands run in `checkm/`.
+```{bash}
+cd ~/mb5370-workshops/checkm
+#Firstly we prepare inputs for checkM. We copy the bins from metabat into the bins folder inside checkm
+cp ../metabat/bins/metabat.*.fa bins/
+
+#Remember that metabat failed to include our longest contig in bins. We need to extract this contig from our assembly and include it with our metabat bins.
+samtools faidx ../flye_metagenome/mock/assembly.fasta contig_40 > bins/contig_40.fa
+
+#Now run the checkm workflow. Since checkm can be very resource intensive you must run it within a slurm job script. Create a new file within your checkm directory and name it run_checkm.sh
+
+#submit job
+sbatch run_checkm.sh
+squeue
+#monitor
+tail -f slurm-518.out
+#the results file, `checkm_results.txt`
+#Which bin shows strain heterogenity and why?
+#metabat.8, its duplicated marker genes are very similar, so the extra copies come from closely related strains or species. The likely cause is the two Vibrio species in the mock community, which are hard to separate by GC and coverage. Its contamination is low and completeness high, so the bin is still good overall.
+
+```
