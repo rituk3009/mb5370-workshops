@@ -87,30 +87,29 @@ tail -f slurm-327.out
 ## Assembly quality with QUAST
 
 Commands run in `quast/`.
-```{r}
+```{bash}
 cd ~/mb5370-workshops/quast
 pwd
 #use this command to look at the contig sizes in the flye assembly
-#cat ../flye_genome/amtp4_20x/assembly.fasta | bioawk -c fastx '{print $name, length($seq)}' | sort -n -k2
+cat ../flye_genome/amtp4_20x/assembly.fasta | bioawk -c fastx '{print $name, length($seq)}' | sort -n -k2
 #Two largest contigs: contig_10(3378345) & contig_59 (1775300)
 #Extracting them 
-#samtools faidx ../flye_genome/amtp4_20x/assembly.fasta contig_10 contig_59 > flye_asm/vibrio.fasta
+samtools faidx ../flye_genome/amtp4_20x/assembly.fasta contig_10 contig_59 > flye_asm/vibrio.fasta
 
 #repeating for redbean assembly
-#cat ../redbean/amtp4_20x.ctg.fa | bioawk -c fastx '{print $name, length($seq)}' | sort -n -k2
+cat ../redbean/amtp4_20x.ctg.fa | bioawk -c fastx '{print $name, length($seq)}' | sort -n -k2
 ##longest contigs: ctg2    1764934 & ctg1    3343987
-#samtools faidx ../redbean/amtp4_20x.ctg.fa ctg1 ctg2 > redbean_asm/vibrio.fasta
+samtools faidx ../redbean/amtp4_20x.ctg.fa ctg1 ctg2 > redbean_asm/vibrio.fasta
 
 #creating a link to the original reads
-#ln -s ../flye_genome/amtp4_20x.fastq .
+ln -s ../flye_genome/amtp4_20x.fastq .
 ##also for the reference assembly
-##ln -s /pvol/data/amtp4/reference/vibrio .
+ln -s /pvol/data/amtp4/reference/vibrio .
 
 
 #run quast
-#quast -o quast_vibrio redbean_asm/vibrio.fasta flye_asm/vibrio.fasta -L -t 4 --circos --glimmer -r vibrio/vibrio.fna --features  vibrio/vibrio.gff --nanopore amtp4_20x.fastq
+quast -o quast_vibrio redbean_asm/vibrio.fasta flye_asm/vibrio.fasta -L -t 4 --circos --glimmer -r vibrio/vibrio.fna --features  vibrio/vibrio.gff --nanopore amtp4_20x.fastq
 ```
-
 
 ## Mystery repeat region (optional)
 

@@ -1,7 +1,7 @@
 ---
 title: "Workshop 3: Metagenome Assembly"
-author: "Your Name"
-date: "`r Sys.Date()`"
+author: "Ritu Krishna Raju"
+date: "03/11/2026"
 output: html_document
 ---
 
@@ -22,11 +22,113 @@ R chunks in this file run from the top of the repository, so give file paths fro
 ## Step 1: Examine reads
 
 Reads are linked into `raw_data/`.
+```{bash}
+#Making a symbolic link to the raw reads file in the 
+cd ~/mb5370-workshops/raw_data
+ln -s /pvol/data/metagenome_assembly/reads_R10_0.5.fastq.gz raw_reads.fastq.gz
 
+#change directory back “up” out of `raw_data` like this
+cd ..
+
+#check that the link is correct by using the ls command to list the files in raw_data. Use the -l option to show extended details on each file which will allow you to see the source and target paths for the symbolic link
+ls -l raw_data
+
+# examine the read length distribution in our input data
+zcat raw_data/raw_reads.fastq.gz | head -n 40000 | bioawk -c fastx '{print $name,length($seq)}' > read_lengths.txt
+# Unzips the raw data and sends the data to standard output
+zcat raw_data/raw_reads.fastq.gz \
+# This is a pipe. It sends output from the previous command as input to the next command
+  | \
+# Here we select only the top 40k lines in the file. This equates to 10k reads. It should be plenty to get some stats
+  head -n 40000 | \
+# This is a small bioawk program. It prints the name of each sequence followed by its length
+  bioawk -c fastx '{print $name,length($seq)}' \
+# Send outputs to a file called read_lengths.txt
+  > read_lengths.txt
+```
+```{r}
+# create a plot to visualise these read lengths
+library(tidyverse)
+
+rl_data <- read_tsv("read_lengths.txt",col_names = c("id","length"), show_col_types = FALSE)
+
+ggplot(rl_data, aes(x=length/1000)) + 
+  geom_histogram(binwidth = 2) +
+  xlab("Read Length Kb") + ylab("Number of Reads")
+
+#From this plot it is clear that the majority of reads are between 1 and 50kb in length. A good way to summarise this is the N50 statistic. Although N50 is most often used to summarise genome assemblies it’s also very useful for summarising read length distributions. The reason this statistic is useful is because it is unaffected by having a large number of tiny reads and instead places greatest emphasis on the longer reads in the data.
+```
+```{r}
+#Let’s calculate the read N50 for our sample of reads. The method we will use to calculate N50 is described by the following pseudo-code
+#1Step 1: Rank all reads from longest to shortest
+#2Step 2: Create a new column with the cumulative sum of read lengths (starting from longest read).
+#3Step 3: Find the read at which the cumulative sum surpasses 50% of the total read volume (ie total sum of all read lengths)
+total_len <- sum(rl_data$length)
+
+rl_data |> 
+  arrange(desc(length)) |> #ranks all reads from longest to shortest
+  mutate(cumsum = cumsum(length)) |> #mutate creates a new column called cumsum with the cumulative sums or read lengths
+  filter(cumsum>total_len/2) |> #filters out only the read where the cumsum is 50% of the total read
+  head(n=1) #gives us only the first line
+ 
+```
 ## Step 2: Assembly
 
 Commands run in `flye_metagenome/`.
+```{bash}
+cd ~/mb5370-workshops/flye_metagenome
 
+#Run flye on the simulated data
+#Create a new shell script called run_flye.sh and save it in the flye_metagenome directory
+#enter the slurm script 
+#{#!/bin/bash
+  #SBATCH --time=360
+  #SBATCH --ntasks=4 --mem=6gb
+
+  #echo "Starting flye in $(pwd) at $(date)"
+
+  #flye --nano-hq ../raw_data/raw_reads.fastq.gz --threads 4 --out-dir mock --meta
+
+  #echo "Finished flye in $(pwd) at $(date)"}
+
+#Submit your job using the sbatch command
+sbatch run_flye.sh
+#Monitor job output
+tail -f slurm-483.out
+```
+#Visualised assembly using bandage
+#size and coverage of largest contig: contig_40 4.6mbp 21x 
+
+#When flye is finished running we will want to compare the assembled contigs with reference genomes from the 5 species that comprise our mock community. We will do this here in a very crude way just by tabulating chromosome lengths and their corresponding GC content.
+##The code below shows a bioawk program for calculating GC content and size. Create a new plain text file in rstudio and paste this code into it.
+
+# Bioawk script for calculating gc and printing name,length,GC
+BEGIN {
+    OFS="\t"
+}
+
+{
+    l=length($seq)
+    ngc=gsub("[cgCG]","",$seq)
+    nat=gsub("[taTA]","",$seq)
+    print $name,l,ngc/(ngc+nat)
+}
+
+Save your new file with the name gc.awk in the top level of your project directory (~/mb5370-workshops)
+```{bash}
+#All the reference genomes for our mock community can be found at the path
+ls /pvol/data/mg/refs/*.fna
+
+#test your awk program by using it to print the GC content and contig lengths for all chromosomes in these files. Here we use cat to concatenate all the files together and then use a pipe to send their contents to our bioawk program. Run this from the top level of your project, where you saved gc.awk
+
+cd ..
+cat /pvol/data/mg/refs/*.fna | bioawk -c fastx -f gc.awk
+
+#locating the two circular chromosomes for Vibrio alfascensis in bandage
+#isolating the `gc.awk` output to Vibro alfascensis
+cat /pvol/data/mg/refs/*alfacsensis*.fna | bioawk -c fastx -f gc.awk
+#the two circular chromosomes are "AP024166.1      1553697 "0.438144" & "AP024167.1      320083  0.418301" with a depth of 15x and 14x respectively 
+```
 ## Step 3: Basic assembly QC
 
 Commands run in `assembly_check/`.
