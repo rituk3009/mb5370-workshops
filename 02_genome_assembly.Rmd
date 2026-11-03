@@ -1,7 +1,7 @@
 ---
 title: "Workshop 2: Genome Assembly"
-author: "Your Name"
-date: "`r Sys.Date()`"
+author: "Ritu Krishna Raju"
+date: "27/10/2026"
 output: html_document
 ---
 
@@ -20,16 +20,97 @@ Notes for [Workshop 2](https://mb5370.bioinformatics.guide/workshop2.html). Run 
 ## Redbean assembly
 
 Commands run in `redbean/`.
+```{bash}
+cd ~/mb5370-workshops/redbean
+pwd
+
+cat /pvol/data/amtp4/*_[012].fastq > amtp4.fastq 
+wtdbg2 -x ont -g 5m -t 4 -i amtp4.fastq -fo amtp4
+wtpoa-cns -t 4 -i amtp4.ctg.lay.gz -fo amtp4.ctg.fa
+
+#takes 48.554b sec
+
+assembly-stats amtp4.ctg.fa #is a command-line tool that reports summary statistics for a genome or sequence assembly. sum: total length of all contigs in bases (roughly your assembly size)1.n: number of contigs; 2.ave: average contig length; 3.largest: length of the longest contig; 4.N50: the contig length at which contigs of that size or longer cover at least 50% of the total assembly. Higher N50 generally means a more contiguous assembly. The n beside it is how many contigs it takes to reach that 50%; 5.N60, N70...: the same idea at other cutoffs; 6.N_count / Gaps: number of ambiguous N bases and the gaps they form (usually 0 for contigs, higher for scaffolds)
+
+cat /pvol/data/amtp4/*.fastq > amtp4_20x.fastq #20x coverage
+wtdbg2 -x ont -g 5m -t 4 -i amtp4_20x.fastq -fo amtp4_20x
+wtpoa-cns -t 4 -i amtp4_20x.ctg.lay.gz -fo amtp4_20x.ctg.fa
+#221.286 sec
+assembly-stats amtp4_20x.ctg.fa 
+```
+
 
 ## Flye assembly
 
 Commands run in `flye_genome/`.
+```{bash}
+cd flye_genome
+#Make symbolic links to the same raw data we used for redbean
+ln -s ../redbean/amtp4.fastq .
+ln -s ../redbean/amtp4_20x.fastq .
+
+#running flye in a smaller dataset in the background. Open a new empty shell script. save in flye_genome
+
+#!/bin/bash
+#SBATCH --time=60
+#SBATCH --ntasks=4 --mem=10gb
+
+echo "Starting flye in $(pwd) at $(date)"
+
+flye --nano-raw amtp4.fastq --out-dir amtp4 --genome-size 5m --threads 4
+
+echo "Finished flye in $(pwd) at $(date)"
+
+#Once you have saved your slurm script you can submit it to the queue using the sbatch command
+sbatch run_flye_small.sh
+squeue #check status
+
+#new file in flye_genome;It shows output from the flye command as it is running
+tail slurm-326.out
+
+#If you want to follow (-f) the output as it is created use
+tail -f slurm-326.out
+
+#running flye on the larger dataset
+sbatch run_flye_large.sh
+squeue
+
+tail slurm-327.out
+tail -f slurm-327.out
+```
+
 
 ## Assembly graphs with Bandage
+#checked assembly_graph_amtp4.gfa: zoomed in on highly connected region - edge_15 has a depth of 42x
 
+#checked assembly_graph_amtp4_20x.gfa: chromosome is the large circle, 24x, plasmid is teh smaller circle, 23x. The repeat is the short segment in the big circle at 208x. Compared to the low coverage graph, the main change is that the tangle has been resolved into 2 clean closed circles. More reads-the assembler could bridge the gaps through ambiguous regions.
 ## Assembly quality with QUAST
 
 Commands run in `quast/`.
+```{r}
+cd ~/mb5370-workshops/quast
+pwd
+#use this command to look at the contig sizes in the flye assembly
+#cat ../flye_genome/amtp4_20x/assembly.fasta | bioawk -c fastx '{print $name, length($seq)}' | sort -n -k2
+#Two largest contigs: contig_10(3378345) & contig_59 (1775300)
+#Extracting them 
+#samtools faidx ../flye_genome/amtp4_20x/assembly.fasta contig_10 contig_59 > flye_asm/vibrio.fasta
+
+#repeating for redbean assembly
+#cat ../redbean/amtp4_20x.ctg.fa | bioawk -c fastx '{print $name, length($seq)}' | sort -n -k2
+##longest contigs: ctg2    1764934 & ctg1    3343987
+#samtools faidx ../redbean/amtp4_20x.ctg.fa ctg1 ctg2 > redbean_asm/vibrio.fasta
+
+#creating a link to the original reads
+#ln -s ../flye_genome/amtp4_20x.fastq .
+##also for the reference assembly
+##ln -s /pvol/data/amtp4/reference/vibrio .
+
+
+#run quast
+#quast -o quast_vibrio redbean_asm/vibrio.fasta flye_asm/vibrio.fasta -L -t 4 --circos --glimmer -r vibrio/vibrio.fna --features  vibrio/vibrio.gff --nanopore amtp4_20x.fastq
+```
+
 
 ## Mystery repeat region (optional)
 

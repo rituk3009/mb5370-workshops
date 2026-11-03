@@ -1,7 +1,7 @@
 ---
 title: "Workshop 1: Introduction to the Command Line"
-author: "Your Name"
-date: "`r Sys.Date()`"
+author: "Ritu Krishna Raju"
+date: "27/10/2026"
 output: html_document
 ---
 
@@ -27,11 +27,38 @@ Replace the text below each heading with your own notes. Copy each command you r
 ## Basic unix commands
 
 Notes on `pwd`, `ls`, `cd` and how unix commands are put together.
-
+```{bash}
+ls #lists all the files in the working directory
+ls -1 #lists all the files with 1 entry per line
+ls -1r #lists in reverse
+cd #to change the working directory by inputting the desired file path 
+pwd #always use with 'cd' to check what your working directory is
+```
 ## Viewing and searching files
 
 Notes on `cat`, `head`, `grep` and `man`.
+```{bash}
+cd ~/mb5370-workshops/command_line
+echo $'>fasta_header\nMMGTSRCVILLFALLLWAANAAPPEIHTTRPNVPEEIKRPNSTEIETPAVKQLETPSIFL\nLTTLEVAEADVDSTLETMKDRNKKNSAKLSKIGNNMKSLLSVFSVFGGFLSLLSVVTTTS' > test.fasta
 
+cat test.fasta #to view the file
+head -2 test.fasta #to view only the first two lines #default is first 10 lines
+
+grep '^>' test.fasta #globally search a regular expression and print; finds lines matching specific strings in files; this specific one is to find the fasta header
+
+grep KDRNKKNSAK test.fasta #to look up a sepcific amino acid sequence 
+
+man grep #to view the manual and look up useful flags
+grep -n KDRNKKNSAK test.fasta #to report line number of matches
+grep -i kdrnkknsak test.fasta #case insensitive match
+grep -c KDRNKKNSAK test.fasta #count all files that contain that pattern
+grep -w KDRNKKNSAK test.fasta #match whole words only
+```
 ## Sequence file formats
 
-Notes on the fasta and fastq formats.
+Notes on the fasta and fastq formats. 
+fasta<- Consists of 1 or more entries each of which consists of a header and a sequence. Each entry has a title line and a sequence. Multiple entries can be stored in a  single file. Line 1 starts with > and holds the sequence ID. Line 2 (or several lines, for long sequences) holds the sequence itself.
+fastq<- Designed for storing sequencing data along with quality scores. Like fasta but with additional information about the reliabilty of each base. Mostly used to store outputs from sequencing instruments. Each entry has 4 lines. Often millions of entries. 1. @ followed by the read I 2. The sequence 3.+ (optionally repeating the ID) 4. Quality string, with one character per base
+```{bash}
+
+```
